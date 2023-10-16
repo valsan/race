@@ -11,6 +11,12 @@ public class KartMovement : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI _speedText;
 
+    [Header("Wheels")]
+    [SerializeField] private Transform _frontLeftWheel;
+    [SerializeField] private Transform _frontRightWheel;
+    [SerializeField] private float _maxWheelRotation = 60f;
+    [SerializeField] private float _wheelRotationSpeed = .1f;
+
     public float SteerValue => MoveInput.x;
     public Vector2 MoveInput { get; private set; }
     public float CurrentSpeed { get; private set; }
@@ -24,13 +30,21 @@ public class KartMovement : MonoBehaviour
     public void OnMove(InputValue value)
     {
         MoveInput = value.Get<Vector2>();
-        Debug.Log(MoveInput);
     }
 
     private void Update()
     {
         UpdateUI();
         HandleKartRotation();
+        HandleWheelRotation();
+    }
+
+    private void HandleWheelRotation()
+    {
+        var step = _wheelRotationSpeed * Time.deltaTime;
+
+        _frontLeftWheel.localRotation = Quaternion.RotateTowards(_frontLeftWheel.localRotation, Quaternion.Euler(0, MoveInput.x * _maxWheelRotation, 0), step);
+        _frontRightWheel.localRotation = Quaternion.RotateTowards(_frontRightWheel.localRotation, Quaternion.Euler(0, MoveInput.x * _maxWheelRotation, 0), step);
     }
 
     private void UpdateUI()
