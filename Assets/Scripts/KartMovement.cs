@@ -4,6 +4,8 @@ using UnityEngine.InputSystem;
 
 public class KartMovement : MonoBehaviour
 {
+    private RaycastHit _groundInfo;
+    [SerializeField] private float _gravity;
     [SerializeField] private float _speed;
     [SerializeField] private float _acceleration;
     [SerializeField] private float _maxSteeringAngle = 45f;
@@ -22,6 +24,7 @@ public class KartMovement : MonoBehaviour
     public float CurrentSpeed { get; private set; }
     public bool IsGrounded { get; private set; }
     private Rigidbody _rigidbody;
+    public RaycastHit GroundInfo => _groundInfo;
 
     private void Awake()
     {
@@ -54,10 +57,21 @@ public class KartMovement : MonoBehaviour
 
     private void FixedUpdate()
     {
+        Physics.Raycast(transform.position, -transform.up, out _groundInfo, 1f);
         HandleMove();
         HandleSteer();
+        HandleGravity();
     }
 
+    private void HandleGravity()
+    {
+        _rigidbody.AddForce(-GroundInfo.normal * _gravity, ForceMode.Acceleration);
+    }
+
+
+    /// <summary>
+    /// Keeps the Kart parallel to the ground
+    /// </summary>
     private void HandleKartRotation()
     {
         if (Physics.Raycast(transform.position, -transform.up, out RaycastHit hitInfo, 1f))
@@ -95,7 +109,12 @@ public class KartMovement : MonoBehaviour
         }
 
         Vector3 desiredVelocity = transform.forward * CurrentSpeed;
-        desiredVelocity.y = _rigidbody.velocity.y;
         _rigidbody.velocity = desiredVelocity;
+        Debug.DrawRay(transform.position, desiredVelocity * 5, Color.green, 2f);
+    }
+
+    private void OnDrawGizmos()
+    {
+        Debug.DrawRay(transform.position, transform.forward * 5, Color.red, 2f);
     }
 }
