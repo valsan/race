@@ -35,7 +35,7 @@ Transform:
   m_Children:
   - {fileID: 7018345303694195445}
   m_Father: {fileID: 0}
-  m_RootOrder: 0
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &7479094070889344607
 MonoBehaviour:
@@ -114,20 +114,26 @@ MonoBehaviour:
   _maxSteeringAngle: 1
   _kartGroundNormalRotationSpeed: 10
   _speedText: {fileID: 0}
-  _maxBoostSpeed: 2
-  _boostDuration: 1
+  _maxBoostSpeed: 5
+  _boostDuration: 2
   _frontLeftWheel: {fileID: 7018345303694195441}
   _frontRightWheel: {fileID: 7018345303694195455}
   _maxWheelRotation: 45
   _wheelRotationSpeed: 720
   _animator: {fileID: 6155360627388988348}
+  _kartVisuals: {fileID: 7018345303694550741}
+  _turboParticleFX: {fileID: 6451132725361979883}
   _particleSystemLeft: {fileID: 26558546585337947}
   _particleSystemRight: {fileID: 4229525344926006867}
-  _turboParticleFX: {fileID: 6451132725361979883}
-  _kartVisuals: {fileID: 7018345303694550741}
   _maxDriftKartRotation: 20
   _kartRotatioResetSpeed: 10
+  _mediumBoostDriftTime: 1.5
+  _strongBoostDriftTime: 3
+  _baseBoostColor: {r: 0, g: 1, b: 1, a: 1}
+  _mediumBoostColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  _strongBoostColor: {r: 1, g: 0, b: 1, a: 1}
   <BaseMaxSpeed>k__BackingField: 10
+  <DriftCentrifugalForce>k__BackingField: 2
 --- !u!135 &2178103701996723449
 SphereCollider:
   m_ObjectHideFlags: 0
