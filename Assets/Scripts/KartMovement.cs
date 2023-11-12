@@ -33,6 +33,10 @@ public class KartMovement : MonoBehaviour
 
     [SerializeField] private ParticleSystem _particleSystemLeft;
     [SerializeField] private ParticleSystem _particleSystemRight;
+    [SerializeField] private ParticleSystem _turboParticleFX;
+    [SerializeField] private GameObject _kartVisuals;
+    [SerializeField] private float _maxDriftKartRotation = 20f;
+    [SerializeField] private float _kartRotatioResetSpeed = 10f;
 
     [field: SerializeField] public float BaseMaxSpeed { get; private set; }
     public float MaxSpeed { get; private set; }
@@ -117,8 +121,16 @@ public class KartMovement : MonoBehaviour
         }
         if (Input.GetKeyUp(KeyCode.Space))
         {
-            IsDrifting = false;
+            StopDrift();
         }
+    }
+
+    private void StopDrift()
+    {
+        if (!IsDrifting) return;
+        IsDrifting = false;
+
+        ActivateBoost();
     }
 
     private void OnJump()
@@ -173,17 +185,19 @@ public class KartMovement : MonoBehaviour
 
     private void HandleSteer()
     {
-        if (!IsDrifting)
-        {
 
-            bool isMovingForward = transform.InverseTransformDirection(_rigidbody.velocity).z > 0;
-            float maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _maxSteeringAngle, _rigidbody.velocity.magnitude / BaseMaxSpeed);
-            float yRotation = MoveInput.x * maxSteeringAngleBasedOnCurrentSpeed * (isMovingForward ? 1 : -1);
-            transform.Rotate(Vector3.up, yRotation);
+        bool isMovingForward = transform.InverseTransformDirection(_rigidbody.velocity).z > 0;
+        float maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _maxSteeringAngle, _rigidbody.velocity.magnitude / BaseMaxSpeed);
+        float yRotation = MoveInput.x * maxSteeringAngleBasedOnCurrentSpeed * (isMovingForward ? 1 : -1);
+        transform.Rotate(Vector3.up, yRotation);
+        if (IsDrifting)
+        {
+            _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, _maxDriftKartRotation * MoveInput.x, 0), Time.deltaTime);
+            //_rigidbody.AddForce(transform.right * MoveInput.x);
         }
         else
         {
-            _rigidbody.AddForce(transform.right * MoveInput.x);
+            _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, 0, 0), Time.fixedDeltaTime * _kartRotatioResetSpeed);
         }
     }
 
@@ -220,6 +234,7 @@ public class KartMovement : MonoBehaviour
     {
         if (_volume.profile.TryGet<LensDistortion>(out LensDistortion lensDistortion))
         {
+            _turboParticleFX.Play();
             IsBoostActive = true;
             MaxSpeed = BaseMaxSpeed + _maxBoostSpeed;
             Tween.Custom(0, -1, _boostDuration * 0.8f, onValueChange: newVal => lensDistortion.intensity.Override(newVal));
@@ -230,8 +245,8 @@ public class KartMovement : MonoBehaviour
                 lensDistortion.intensity.Override(Mathf.Lerp(0, _lensDistortionOverride, (Time.time - startTime) / (_boostDuration / 2)));
                 yield return null;
             }
+            _turboParticleFX.Stop();
             lensDistortion.intensity.Override(0);
-            //Tween.Custom(lensDistortion.intensity.value, 0, _boostDuration * 0.2f, onValueChange: newVal => lensDistortion.intensity.Override(newVal));
             MaxSpeed = BaseMaxSpeed;
             IsBoostActive = false;
         };
