@@ -1,3 +1,4 @@
+using PrimeTween;
 using System;
 using System.Collections;
 using TMPro;
@@ -5,7 +6,6 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
-
 public class KartMovement : MonoBehaviour
 {
     [SerializeField] private Volume _volume;
@@ -19,25 +19,81 @@ public class KartMovement : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI _speedText;
 
+    [Header("Boost")]
+    [SerializeField] private float _maxBoostSpeed = 10f;
+    [SerializeField] private float _boostDuration = 1f;
+
     [Header("Wheels")]
     [SerializeField] private Transform _frontLeftWheel;
     [SerializeField] private Transform _frontRightWheel;
     [SerializeField] private float _maxWheelRotation = 60f;
     [SerializeField] private float _wheelRotationSpeed = .1f;
 
-    [field: SerializeField] public float MaxSpeed { get; private set; }
+    [SerializeField] private Animator _animator;
+
+    [SerializeField] private ParticleSystem _particleSystemLeft;
+    [SerializeField] private ParticleSystem _particleSystemRight;
+
+    [field: SerializeField] public float BaseMaxSpeed { get; private set; }
+    public float MaxSpeed { get; private set; }
     public float SteerValue => MoveInput.x;
     public Vector2 MoveInput { get; private set; }
     public float CurrentSpeed { get; private set; }
     public bool IsGrounded { get; private set; }
+    public bool IsBoostActive { get; private set; }
     public RaycastHit GroundInfo => _groundInfo;
+
+    public bool IsJumping { get; private set; }
+    private bool _isDrifting;
+    public bool IsDrifting
+    {
+        get => _isDrifting; private set
+        {
+            if (value)
+            {
+                Debug.Log("START DRIFT");
+                _particleSystemLeft.Play();
+                _particleSystemRight.Play();
+            }
+            else
+            {
+                Debug.Log("END DRIFT");
+                _particleSystemLeft.Stop();
+                _particleSystemRight.Stop();
+            }
+            _isDrifting = value;
+        }
+    }
 
     private Rigidbody _rigidbody;
 
     private void Awake()
     {
         _rigidbody = GetComponent<Rigidbody>();
+    }
+    private void OnEnable()
+    {
+        var animationController = GetComponentInChildren<KartAnimationController>();
+        animationController.OnLand += OnLand;
+    }
 
+    private void OnLand()
+    {
+        IsJumping = false;
+        // Do nothing if when landing there is not steer input
+        if (Mathf.Approximately(SteerValue, 0f)) return;
+
+        // Start Drifting
+        if (Input.GetKey(KeyCode.Space))
+        {
+            IsDrifting = true;
+        }
+    }
+
+    private void Start()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        MaxSpeed = BaseMaxSpeed;
     }
     public void OnMove(InputValue value)
     {
@@ -47,16 +103,29 @@ public class KartMovement : MonoBehaviour
     private void Update()
     {
         UpdateUI();
-        HandleKartRotation();
+        KeepKartParallelToGround();
         HandleWheelRotation();
 
         if (Input.GetKeyDown(KeyCode.LeftShift))
         {
             ActivateBoost();
         }
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            OnJump();
+        }
+        if (Input.GetKeyUp(KeyCode.Space))
+        {
+            IsDrifting = false;
+        }
     }
 
-
+    private void OnJump()
+    {
+        IsJumping = true;
+        _animator.SetTrigger("OnJump");
+    }
 
     private void HandleWheelRotation()
     {
@@ -88,7 +157,7 @@ public class KartMovement : MonoBehaviour
     /// <summary>
     /// Keeps the Kart parallel to the ground
     /// </summary>
-    private void HandleKartRotation()
+    private void KeepKartParallelToGround()
     {
         if (Physics.Raycast(transform.position, -transform.up, out RaycastHit hitInfo, 2f))
         {
@@ -104,14 +173,20 @@ public class KartMovement : MonoBehaviour
 
     private void HandleSteer()
     {
-        bool isMovingForward = transform.InverseTransformDirection(_rigidbody.velocity).z > 0;
-        float yRotation = MoveInput.x * (_rigidbody.velocity.magnitude / MaxSpeed) * _maxSteeringAngle * (isMovingForward ? 1 : -1);
-        transform.Rotate(Vector3.up, yRotation);
+        if (!IsDrifting)
+        {
+
+            bool isMovingForward = transform.InverseTransformDirection(_rigidbody.velocity).z > 0;
+            float maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _maxSteeringAngle, _rigidbody.velocity.magnitude / BaseMaxSpeed);
+            float yRotation = MoveInput.x * maxSteeringAngleBasedOnCurrentSpeed * (isMovingForward ? 1 : -1);
+            transform.Rotate(Vector3.up, yRotation);
+        }
+        else
+        {
+            _rigidbody.AddForce(transform.right * MoveInput.x);
+        }
     }
 
-    [SerializeField] private float _maxBoostSpeed = 10f;
-    [SerializeField] private float _boostDuration = 1f;
-    public float CurrentBoostSpeed = 0f;
     /// <summary>
     /// Boosts desired speed for 
     /// </summary>
@@ -136,7 +211,6 @@ public class KartMovement : MonoBehaviour
             CurrentSpeed = Mathf.Lerp(CurrentSpeed, 0, Time.fixedDeltaTime * _acceleration);
         }
 
-        //CurrentSpeed += CurrentBoostSpeed;
         Vector3 desiredVelocity = transform.forward * CurrentSpeed;
         _rigidbody.velocity = desiredVelocity;
         Debug.DrawRay(transform.position, desiredVelocity * 5, Color.green);
@@ -146,16 +220,20 @@ public class KartMovement : MonoBehaviour
     {
         if (_volume.profile.TryGet<LensDistortion>(out LensDistortion lensDistortion))
         {
+            IsBoostActive = true;
+            MaxSpeed = BaseMaxSpeed + _maxBoostSpeed;
+            Tween.Custom(0, -1, _boostDuration * 0.8f, onValueChange: newVal => lensDistortion.intensity.Override(newVal));
             float startTime = Time.time;
             float endTime = Time.time + _boostDuration;
             while (Time.time < endTime)
             {
                 lensDistortion.intensity.Override(Mathf.Lerp(0, _lensDistortionOverride, (Time.time - startTime) / (_boostDuration / 2)));
-                CurrentBoostSpeed = _maxBoostSpeed;
                 yield return null;
             }
-            CurrentBoostSpeed = 0f;
             lensDistortion.intensity.Override(0);
+            //Tween.Custom(lensDistortion.intensity.value, 0, _boostDuration * 0.2f, onValueChange: newVal => lensDistortion.intensity.Override(newVal));
+            MaxSpeed = BaseMaxSpeed;
+            IsBoostActive = false;
         };
     }
 }
