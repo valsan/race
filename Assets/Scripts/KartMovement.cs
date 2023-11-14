@@ -24,17 +24,13 @@ public class KartMovement : MonoBehaviour
     [SerializeField] private Volume _volume;
     [SerializeField] private float _lensDistortionOverride;
 
+    [SerializeField] private KartMovementConfig _movementConfig;
+
     private RaycastHit _groundInfo;
     [SerializeField] private float _gravity;
-    [SerializeField] private float _acceleration;
-    [SerializeField] private float _maxSteeringAngle = 45f;
     [SerializeField] private float _kartGroundNormalRotationSpeed = 10f;
 
     [SerializeField] private TextMeshProUGUI _speedText;
-
-    [Header("Boost")]
-    [SerializeField] private float _maxBoostSpeed = 10f;
-    [SerializeField] private float _boostDuration = 1f;
 
     [Header("Wheels")]
     [SerializeField] private Transform _frontLeftWheel;
@@ -61,20 +57,19 @@ public class KartMovement : MonoBehaviour
 
     public DriftLevel DriftLevel { get; private set; } = DriftLevel.NONE;
     public SteerDirection DriftDirection { get; private set; }
-    [field: SerializeField] public float BaseMaxSpeed { get; private set; }
     [field: SerializeField] public float DriftCentrifugalForce { get; private set; }
     public float MaxSpeed { get; private set; }
     public float SteerValue => MoveInput.x;
-    public Vector2 MoveInput { get; private set; }
+    public Vector2 MoveInput { get; set; }
     public float CurrentSpeed { get; private set; }
     public bool IsGrounded { get; private set; }
     public bool IsBoostActive { get; private set; }
     public RaycastHit GroundInfo => _groundInfo;
     public bool IsJumping { get; private set; }
+    public bool IsHoldingDrift { get; set; }
     public bool IsDrifting { get; private set; }
     public float DriftStartTime { get; private set; }
     public float TimeSinceStartedDrifting => Time.time - DriftStartTime;
-
 
     private Rigidbody _rigidbody;
 
@@ -88,6 +83,43 @@ public class KartMovement : MonoBehaviour
         animationController.OnLand += OnLand;
     }
 
+
+    private void Start()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        MaxSpeed = _movementConfig.MaxSpeed;
+    }
+
+
+    private void Update()
+    {
+        UpdateUI();
+        KeepKartParallelToGround();
+        HandleWheelRotation();
+        HandleDriftLevel();
+    }
+
+    public void OnMove(InputValue value)
+    {
+        MoveInput = value.Get<Vector2>();
+    }
+
+    public void StopDrift()
+    {
+        if (!IsDrifting) return;
+        IsDrifting = false;
+        _particleSystemLeft.Stop();
+        _particleSystemRight.Stop();
+        ActivateBoost(DriftLevel);
+        DriftLevel = DriftLevel.NONE;
+    }
+
+    public void OnJump()
+    {
+        IsJumping = true;
+        _animator.SetTrigger("OnJump");
+    }
+
     private void OnLand()
     {
         IsJumping = false;
@@ -96,43 +128,11 @@ public class KartMovement : MonoBehaviour
 
         DriftDirection = SteerValue > 0f ? SteerDirection.RIGHT : SteerDirection.LEFT;
 
+        Debug.Log("IS HOLDING DRIGT: " + IsHoldingDrift);
         // Only start drifting if player holding Space
-        if (Input.GetKey(KeyCode.Space))
+        if (IsHoldingDrift)
         {
             StartDrifting();
-        }
-    }
-
-
-    private void Start()
-    {
-        Cursor.lockState = CursorLockMode.Locked;
-        MaxSpeed = BaseMaxSpeed;
-    }
-    public void OnMove(InputValue value)
-    {
-        MoveInput = value.Get<Vector2>();
-    }
-
-    private void Update()
-    {
-        UpdateUI();
-        KeepKartParallelToGround();
-        HandleWheelRotation();
-        HandleDriftLevel();
-
-        if (Input.GetKeyDown(KeyCode.LeftShift))
-        {
-            ActivateBoost(DriftLevel.MEDIUM);
-        }
-
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            OnJump();
-        }
-        if (Input.GetKeyUp(KeyCode.Space))
-        {
-            StopDrift();
         }
     }
 
@@ -206,20 +206,7 @@ public class KartMovement : MonoBehaviour
     }
 
 
-    private void StopDrift()
-    {
-        if (!IsDrifting) return;
-        IsDrifting = false;
-        _particleSystemLeft.Stop();
-        _particleSystemRight.Stop();
-        ActivateBoost(DriftLevel);
-        DriftLevel = DriftLevel.NONE;
-    }
-    private void OnJump()
-    {
-        IsJumping = true;
-        _animator.SetTrigger("OnJump");
-    }
+
 
     private void HandleWheelRotation()
     {
@@ -261,27 +248,25 @@ public class KartMovement : MonoBehaviour
     {
         bool isMovingForward = transform.InverseTransformDirection(_rigidbody.velocity).z > 0;
         float maxSteeringAngleBasedOnCurrentSpeed;
-        float yRotation = 0f;
+        float yRotation;
         if (IsDrifting)
         {
             float driftSteerValue = DriftDirection == SteerDirection.RIGHT ? SteerValue + 1.5f : SteerValue - 1.5f;
+
             _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, _maxDriftKartRotation * driftSteerValue, 0), Time.deltaTime);
+
 
             // Apply outward force ("centrifugal force")
             _rigidbody.AddForce(transform.right * (DriftDirection == SteerDirection.RIGHT ? -1 : 1) * Time.fixedDeltaTime * DriftCentrifugalForce, ForceMode.Acceleration);
-            maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _maxSteeringAngle, _rigidbody.velocity.magnitude / BaseMaxSpeed);
+            maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _movementConfig.MaxSteeringAngle, _rigidbody.velocity.magnitude / _movementConfig.MaxSpeed);
             yRotation = driftSteerValue * maxSteeringAngleBasedOnCurrentSpeed;
         }
         else
         {
             _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, 0, 0), Time.fixedDeltaTime * _kartRotatioResetSpeed);
-            maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _maxSteeringAngle, _rigidbody.velocity.magnitude / BaseMaxSpeed);
+            maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _movementConfig.MaxSteeringAngle, _rigidbody.velocity.magnitude / _movementConfig.MaxSpeed);
             yRotation = SteerValue * maxSteeringAngleBasedOnCurrentSpeed * (isMovingForward ? 1 : -1);
         }
-        // TOOD: Steer more when drifting "inwards" and pull kart out when driftwing outwards
-
-
-
         transform.Rotate(Vector3.up, yRotation);
     }
 
@@ -298,15 +283,15 @@ public class KartMovement : MonoBehaviour
     {
         if (MoveInput.y > 0)
         {
-            CurrentSpeed = Mathf.Lerp(CurrentSpeed, MaxSpeed, Time.fixedDeltaTime * _acceleration);
+            CurrentSpeed = Mathf.Lerp(CurrentSpeed, MaxSpeed, Time.fixedDeltaTime * _movementConfig.Acceleration);
         }
         else if (MoveInput.y < 0)
         {
-            CurrentSpeed = Mathf.Lerp(CurrentSpeed, -MaxSpeed / 2, Time.fixedDeltaTime * _acceleration);
+            CurrentSpeed = Mathf.Lerp(CurrentSpeed, -MaxSpeed / 2, Time.fixedDeltaTime * _movementConfig.Acceleration);
         }
         else
         {
-            CurrentSpeed = Mathf.Lerp(CurrentSpeed, 0, Time.fixedDeltaTime * _acceleration);
+            CurrentSpeed = Mathf.Lerp(CurrentSpeed, 0, Time.fixedDeltaTime * _movementConfig.Acceleration);
         }
 
         Vector3 desiredVelocity = transform.forward * CurrentSpeed;
@@ -319,13 +304,13 @@ public class KartMovement : MonoBehaviour
         Debug.Log("START BOOST : " + DriftLevel);
         _turboParticleFX.Play();
         IsBoostActive = true;
-        MaxSpeed = BaseMaxSpeed + (_maxBoostSpeed * ((float)(int)driftLevel + 1) / 3);
+        MaxSpeed = _movementConfig.MaxSpeed + (_movementConfig.BoostSpeed * ((float)(int)driftLevel + 1) / 3);
         float startTime = Time.time;
-        float adaptedDuration = _boostDuration * (((float)(int)driftLevel + 1) / 2);
+        float adaptedDuration = _movementConfig.BoostDuration * (((float)(int)driftLevel + 1) / 2);
         float endTime = Time.time + adaptedDuration;
         yield return new WaitForSeconds(adaptedDuration);
         _turboParticleFX.Stop();
-        MaxSpeed = BaseMaxSpeed;
+        MaxSpeed = _movementConfig.MaxSpeed;
         IsBoostActive = false;
         Debug.Log("END BOOST");
     }
