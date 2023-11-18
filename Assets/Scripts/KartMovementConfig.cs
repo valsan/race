@@ -11,4 +11,5 @@ public class KartMovementConfig : ScriptableObject
     public float MaxDriftAngle = 1.5f;
     public float BoostDuration = 1f;
     public float BoostSpeed = 10f;
+    public float MinSpeedToDrift = 5f;
 }

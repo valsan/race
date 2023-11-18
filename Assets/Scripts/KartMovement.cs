@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 public enum DriftLevel
@@ -68,7 +67,6 @@ public class KartMovement : MonoBehaviour
     public bool IsDrifting { get; private set; }
     public float DriftStartTime { get; private set; }
     public float TimeSinceStartedDrifting => Time.time - DriftStartTime;
-
     // Controller controls these
     public bool IsHoldingDrift { get; set; }
     public bool Throttle { get; set; }
@@ -103,20 +101,14 @@ public class KartMovement : MonoBehaviour
         HandleDriftLevel();
     }
 
-    public void OnMove(InputValue value)
+    private void FixedUpdate()
     {
-        MoveInput = value.Get<Vector2>();
+        Physics.Raycast(transform.position, -transform.up, out _groundInfo, 1f);
+        HandleMove();
+        HandleSteer();
+        HandleGravity();
     }
 
-    public void StopDrift()
-    {
-        if (!IsDrifting) return;
-        IsDrifting = false;
-        _particleSystemLeft.Stop();
-        _particleSystemRight.Stop();
-        ActivateBoost(DriftLevel);
-        DriftLevel = DriftLevel.NONE;
-    }
 
     public void OnJump()
     {
@@ -141,13 +133,7 @@ public class KartMovement : MonoBehaviour
     }
 
 
-    private void FixedUpdate()
-    {
-        Physics.Raycast(transform.position, -transform.up, out _groundInfo, 1f);
-        HandleMove();
-        HandleSteer();
-        HandleGravity();
-    }
+
 
     private void HandleDriftLevel()
     {
@@ -209,8 +195,27 @@ public class KartMovement : MonoBehaviour
         _particleSystemRight.Play();
     }
 
+    public void StopDrift()
+    {
+        if (!IsDrifting) return;
+        IsDrifting = false;
+        _particleSystemLeft.Stop();
+        _particleSystemRight.Stop();
+        ActivateBoost(DriftLevel);
+        DriftLevel = DriftLevel.NONE;
+    }
 
-
+    /// <summary>
+    /// Like Stop Drift, but doesn't activate boost
+    /// </summary>
+    public void CancelDrift()
+    {
+        if (!IsDrifting) return;
+        IsDrifting = false;
+        _particleSystemLeft.Stop();
+        _particleSystemRight.Stop();
+        DriftLevel = DriftLevel.NONE;
+    }
 
     private void HandleWheelRotation()
     {
@@ -255,6 +260,7 @@ public class KartMovement : MonoBehaviour
         float yRotation;
         if (IsDrifting)
         {
+            StopDrifingIfSlowedDownTooMuch();
             float driftDirectionModifier = DriftDirection == SteerDirection.RIGHT ? 1 : -1f;
             float positiveSteerValue = DriftDirection == SteerDirection.RIGHT ? Mathf.InverseLerp(-1, 1, SteerValue) : Mathf.InverseLerp(1, -1, SteerValue);
 
@@ -273,6 +279,11 @@ public class KartMovement : MonoBehaviour
             yRotation = SteerValue * maxSteeringAngleBasedOnCurrentSpeed * (isMovingForward ? 1 : -1);
         }
         transform.Rotate(Vector3.up, yRotation);
+    }
+
+    private void StopDrifingIfSlowedDownTooMuch()
+    {
+        if (CurrentSpeed < _movementConfig.MinSpeedToDrift) CancelDrift();
     }
 
     /// <summary>
