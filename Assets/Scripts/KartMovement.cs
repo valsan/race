@@ -15,8 +15,8 @@ public enum DriftLevel
 
 public enum SteerDirection
 {
-    LEFT,
-    RIGHT
+    LEFT = -1,
+    RIGHT = 1
 }
 
 public class KartMovement : MonoBehaviour
@@ -60,16 +60,20 @@ public class KartMovement : MonoBehaviour
     [field: SerializeField] public float DriftCentrifugalForce { get; private set; }
     public float MaxSpeed { get; private set; }
     public float SteerValue => MoveInput.x;
-    public Vector2 MoveInput { get; set; }
     public float CurrentSpeed { get; private set; }
     public bool IsGrounded { get; private set; }
     public bool IsBoostActive { get; private set; }
     public RaycastHit GroundInfo => _groundInfo;
     public bool IsJumping { get; private set; }
-    public bool IsHoldingDrift { get; set; }
     public bool IsDrifting { get; private set; }
     public float DriftStartTime { get; private set; }
     public float TimeSinceStartedDrifting => Time.time - DriftStartTime;
+
+    // Controller controls these
+    public bool IsHoldingDrift { get; set; }
+    public bool Throttle { get; set; }
+    public bool Reverse { get; set; }
+    public Vector2 MoveInput { get; set; }
 
     private Rigidbody _rigidbody;
 
@@ -251,15 +255,16 @@ public class KartMovement : MonoBehaviour
         float yRotation;
         if (IsDrifting)
         {
-            float driftSteerValue = DriftDirection == SteerDirection.RIGHT ? SteerValue + 1.5f : SteerValue - 1.5f;
+            float driftDirectionModifier = DriftDirection == SteerDirection.RIGHT ? 1 : -1f;
+            float positiveSteerValue = DriftDirection == SteerDirection.RIGHT ? Mathf.InverseLerp(-1, 1, SteerValue) : Mathf.InverseLerp(1, -1, SteerValue);
 
-            _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, _maxDriftKartRotation * driftSteerValue, 0), Time.deltaTime);
+            _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, _maxDriftKartRotation * positiveSteerValue * driftDirectionModifier, 0), Time.deltaTime);
 
 
             // Apply outward force ("centrifugal force")
-            _rigidbody.AddForce(transform.right * (DriftDirection == SteerDirection.RIGHT ? -1 : 1) * Time.fixedDeltaTime * DriftCentrifugalForce, ForceMode.Acceleration);
-            maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, _movementConfig.MaxSteeringAngle, _rigidbody.velocity.magnitude / _movementConfig.MaxSpeed);
-            yRotation = driftSteerValue * maxSteeringAngleBasedOnCurrentSpeed;
+            //_rigidbody.AddForce(transform.right * (DriftDirection == SteerDirection.RIGHT ? -1 : 1) * Time.fixedDeltaTime * DriftCentrifugalForce, ForceMode.Acceleration);
+            maxSteeringAngleBasedOnCurrentSpeed = Mathf.Lerp(0, positiveSteerValue * _movementConfig.MaxDriftAngle * driftDirectionModifier, _rigidbody.velocity.magnitude / _movementConfig.MaxSpeed);
+            yRotation = positiveSteerValue * maxSteeringAngleBasedOnCurrentSpeed;
         }
         else
         {
@@ -281,17 +286,17 @@ public class KartMovement : MonoBehaviour
 
     private void HandleMove()
     {
-        if (MoveInput.y > 0)
+        if (Throttle)
         {
             CurrentSpeed = Mathf.Lerp(CurrentSpeed, MaxSpeed, Time.fixedDeltaTime * _movementConfig.Acceleration);
         }
-        else if (MoveInput.y < 0)
+        else if (Reverse)
         {
             CurrentSpeed = Mathf.Lerp(CurrentSpeed, -MaxSpeed / 2, Time.fixedDeltaTime * _movementConfig.Acceleration);
         }
         else
         {
-            CurrentSpeed = Mathf.Lerp(CurrentSpeed, 0, Time.fixedDeltaTime * _movementConfig.Acceleration);
+            CurrentSpeed = Mathf.Lerp(CurrentSpeed, 0, Time.fixedDeltaTime * _movementConfig.Deceleration);
         }
 
         Vector3 desiredVelocity = transform.forward * CurrentSpeed;
@@ -299,7 +304,7 @@ public class KartMovement : MonoBehaviour
         Debug.DrawRay(transform.position, desiredVelocity * 5, Color.green);
     }
 
-    IEnumerator BoostCoroutine(DriftLevel driftLevel)
+    private IEnumerator BoostCoroutine(DriftLevel driftLevel)
     {
         Debug.Log("START BOOST : " + DriftLevel);
         _turboParticleFX.Play();

@@ -3,23 +3,28 @@ using UnityEngine.InputSystem;
 
 public class PlayerInputController : MonoBehaviour
 {
-    [SerializeField] KartMovement _kart;
+    [SerializeField] private KartMovement _kart;
 
     private InputAction _jumpAction;
     private InputAction _throttleAction;
+    private InputAction _reverseAction;
 
     private PlayerInput _playerInput;
     private void Awake()
     {
         _playerInput = GetComponent<PlayerInput>();
         _jumpAction = _playerInput.actions["Jump"];
-        _throttleAction = _playerInput.actions["Gas"];
+        _throttleAction = _playerInput.actions["Throttle"];
+        _reverseAction = _playerInput.actions["Reverse"];
 
         _jumpAction.started += OnJumpPressed;
         _jumpAction.canceled += OnJumpReleased;
 
-        _throttleAction.started += OnJumpPressed;
-        _throttleAction.canceled += OnJumpReleased;
+        _throttleAction.started += OnThrottlePressed;
+        _throttleAction.canceled += OnThrottleReleased;
+
+        _reverseAction.started += OnReversePressed;
+        _reverseAction.canceled += OnReverseReleased;
     }
 
     public void OnMove(InputValue value)
@@ -43,14 +48,22 @@ public class PlayerInputController : MonoBehaviour
     public void OnThrottlePressed(InputAction.CallbackContext context)
     {
         Debug.Log("OnThrottlePressed");
-        _kart.OnJump();
-        _kart.IsHoldingDrift = true;
+        _kart.Throttle = true;
     }
     public void OnThrottleReleased(InputAction.CallbackContext context)
     {
         Debug.Log("OnThrottleReleased");
-        _kart.StopDrift();
-        _kart.IsHoldingDrift = false;
+        _kart.Throttle = false;
     }
 
+    public void OnReversePressed(InputAction.CallbackContext context)
+    {
+        Debug.Log("OnThrottlePressed");
+        _kart.Reverse = true;
+    }
+    public void OnReverseReleased(InputAction.CallbackContext context)
+    {
+        Debug.Log("OnThrottleReleased");
+        _kart.Reverse = false;
+    }
 }
