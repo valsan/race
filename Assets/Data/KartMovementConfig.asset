@@ -12,10 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd180d0353c2ff14487c6fe802c04f0a, type: 3}
   m_Name: KartMovementConfig
   m_EditorClassIdentifier: 
-  MaxSpeed: 20
+  MaxSpeed: 35
   Acceleration: 5
-  Deceleration: 0.5
-  MaxSteeringAngle: 1
-  MaxDriftAngle: 1.5
-  BoostDuration: 1
-  BoostSpeed: 10
+  Deceleration: 5
+  MaxSteeringAngle: 1.5
+  MaxDriftAngle: 2.1
+  BoostDuration: 3
+  BoostSpeed: 20
+  MinSpeedToDrift: 5

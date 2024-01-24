@@ -3,6 +3,7 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 public enum DriftLevel
 {
@@ -20,7 +21,6 @@ public enum SteerDirection
 
 public class KartMovement : MonoBehaviour
 {
-    [SerializeField] private Volume _volume;
     [SerializeField] private float _lensDistortionOverride;
 
     [SerializeField] private KartMovementConfig _movementConfig;
@@ -54,6 +54,14 @@ public class KartMovement : MonoBehaviour
     [SerializeField] private Color _mediumBoostColor = Color.yellow;
     [SerializeField] private Color _strongBoostColor = Color.magenta;
 
+
+    [Header("Post Process FX")]
+    [SerializeField] private Volume _postProcessVolume;
+    [SerializeField] private float _chromaticAberrationBoostIntensity = 0.5f;
+    [SerializeField] private float _lensDistortionBoostIntensity = -0.5f;
+
+    private Coroutine _postProcessCoroutine;
+
     public DriftLevel DriftLevel { get; private set; } = DriftLevel.NONE;
     public SteerDirection DriftDirection { get; private set; }
     [field: SerializeField] public float DriftCentrifugalForce { get; private set; }
@@ -85,13 +93,11 @@ public class KartMovement : MonoBehaviour
         animationController.OnLand += OnLand;
     }
 
-
     private void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
         MaxSpeed = _movementConfig.MaxSpeed;
     }
-
 
     private void Update()
     {
@@ -124,16 +130,13 @@ public class KartMovement : MonoBehaviour
 
         DriftDirection = SteerValue > 0f ? SteerDirection.RIGHT : SteerDirection.LEFT;
 
-        Debug.Log("IS HOLDING DRIGT: " + IsHoldingDrift);
+        Debug.Log("IS HOLDING DRIFT: " + IsHoldingDrift);
         // Only start drifting if player holding Space
         if (IsHoldingDrift)
         {
             StartDrifting();
         }
     }
-
-
-
 
     private void HandleDriftLevel()
     {
@@ -161,7 +164,7 @@ public class KartMovement : MonoBehaviour
             {
                 if (DriftLevel != DriftLevel.STRONG)
                 {
-                    Debug.Log("STRONG");
+                    Debug.Log("STRONG BOOST");
                     DriftLevel = DriftLevel.STRONG;
                     SwapParticleEffectsColor(_strongBoostColor);
                 }
@@ -195,14 +198,11 @@ public class KartMovement : MonoBehaviour
         _particleSystemRight.Play();
     }
 
-    public void StopDrift()
+    public void CancelDriftAndStartBoost()
     {
         if (!IsDrifting) return;
-        IsDrifting = false;
-        _particleSystemLeft.Stop();
-        _particleSystemRight.Stop();
+        CancelDrift();
         ActivateBoost(DriftLevel);
-        DriftLevel = DriftLevel.NONE;
     }
 
     /// <summary>
@@ -235,7 +235,6 @@ public class KartMovement : MonoBehaviour
         _rigidbody.AddForce(-GroundInfo.normal * _gravity, ForceMode.Acceleration);
     }
 
-
     /// <summary>
     /// Keeps the Kart parallel to the ground
     /// </summary>
@@ -250,7 +249,6 @@ public class KartMovement : MonoBehaviour
         {
             IsGrounded = false;
         }
-
     }
 
     private void HandleSteer()
@@ -265,7 +263,6 @@ public class KartMovement : MonoBehaviour
             float positiveSteerValue = DriftDirection == SteerDirection.RIGHT ? Mathf.InverseLerp(-1, 1, SteerValue) : Mathf.InverseLerp(1, -1, SteerValue);
 
             _kartVisuals.transform.localRotation = Quaternion.Lerp(_kartVisuals.transform.localRotation, Quaternion.Euler(0, _maxDriftKartRotation * positiveSteerValue * driftDirectionModifier, 0), Time.deltaTime);
-
 
             // Apply outward force ("centrifugal force")
             //_rigidbody.AddForce(transform.right * (DriftDirection == SteerDirection.RIGHT ? -1 : 1) * Time.fixedDeltaTime * DriftCentrifugalForce, ForceMode.Acceleration);
@@ -317,17 +314,56 @@ public class KartMovement : MonoBehaviour
 
     private IEnumerator BoostCoroutine(DriftLevel driftLevel)
     {
-        Debug.Log("START BOOST : " + DriftLevel);
+        if (_postProcessCoroutine != null)
+        {
+            StopCoroutine(_postProcessCoroutine);
+        }
         _turboParticleFX.Play();
+        _postProcessCoroutine = StartCoroutine(AnimateBoostEffect(true, 0.2f));
         IsBoostActive = true;
         MaxSpeed = _movementConfig.MaxSpeed + (_movementConfig.BoostSpeed * ((float)(int)driftLevel + 1) / 3);
-        float startTime = Time.time;
         float adaptedDuration = _movementConfig.BoostDuration * (((float)(int)driftLevel + 1) / 2);
-        float endTime = Time.time + adaptedDuration;
         yield return new WaitForSeconds(adaptedDuration);
+        _postProcessCoroutine = StartCoroutine(AnimateBoostEffect(false, 0.2f));
         _turboParticleFX.Stop();
         MaxSpeed = _movementConfig.MaxSpeed;
         IsBoostActive = false;
-        Debug.Log("END BOOST");
+    }
+
+    private IEnumerator AnimateBoostEffect(bool isBoostBeginning, float duration)
+    {
+        LensDistortion lensDistortion;
+        _postProcessVolume.profile.TryGet<LensDistortion>(out lensDistortion);
+
+        ChromaticAberration chromaticAberration;
+        _postProcessVolume.profile.TryGet<ChromaticAberration>(out chromaticAberration);
+
+        if (chromaticAberration != null && lensDistortion != null)
+        {
+            float startTime = Time.time;
+            float chromaticAberrationValue;
+            float lensDistortionValue;
+            while (Time.time < startTime + duration)
+            {
+                float timeSinceAnimationStart = Time.time - startTime;
+                float progress = timeSinceAnimationStart / duration;
+                if (isBoostBeginning)
+                {
+                    chromaticAberrationValue = Mathf.Lerp(0f, _chromaticAberrationBoostIntensity, progress);
+                    lensDistortionValue = Mathf.Lerp(0f, _lensDistortionBoostIntensity, progress);
+                }
+                else
+                {
+                    chromaticAberrationValue = Mathf.Lerp(_chromaticAberrationBoostIntensity, 0f, progress);
+                    lensDistortionValue = Mathf.Lerp(_lensDistortionBoostIntensity, 0f, progress);
+                }
+                chromaticAberration.intensity.Override(chromaticAberrationValue);
+                lensDistortion.intensity.Override(lensDistortionValue);
+                yield return null;
+            }
+
+            chromaticAberration.intensity.Override(isBoostBeginning ? _chromaticAberrationBoostIntensity : 0);
+            lensDistortion.intensity.Override(isBoostBeginning ? _lensDistortionBoostIntensity : 0);
+        }
     }
 }

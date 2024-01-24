@@ -34,36 +34,30 @@ public class PlayerInputController : MonoBehaviour
 
     public void OnJumpPressed(InputAction.CallbackContext context)
     {
-        Debug.Log("Jump Pressed");
         _kart.OnJump();
         _kart.IsHoldingDrift = true;
     }
     public void OnJumpReleased(InputAction.CallbackContext context)
     {
-        Debug.Log("Jump Released");
-        _kart.StopDrift();
+        _kart.CancelDriftAndStartBoost();
         _kart.IsHoldingDrift = false;
     }
 
     public void OnThrottlePressed(InputAction.CallbackContext context)
     {
-        Debug.Log("OnThrottlePressed");
         _kart.Throttle = true;
     }
     public void OnThrottleReleased(InputAction.CallbackContext context)
     {
-        Debug.Log("OnThrottleReleased");
         _kart.Throttle = false;
     }
 
     public void OnReversePressed(InputAction.CallbackContext context)
     {
-        Debug.Log("OnThrottlePressed");
         _kart.Reverse = true;
     }
     public void OnReverseReleased(InputAction.CallbackContext context)
     {
-        Debug.Log("OnThrottleReleased");
         _kart.Reverse = false;
     }
 }
